@@ -1,0 +1,179 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: miar-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - miar-net
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/auth-service
+    container_name: miar-auth
+    environment:
+      SERVICE_NAME: auth-service
+      SERVICE_ROLE: auth
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8001:8000"
+    networks:
+      - miar-net
+
+  customers-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/customers-service
+    container_name: miar-customers
+    environment:
+      SERVICE_NAME: customers-service
+      SERVICE_ROLE: customers
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8002:8000"
+    networks:
+      - miar-net
+
+  accounts-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/accounts-service
+    container_name: miar-accounts
+    environment:
+      SERVICE_NAME: accounts-service
+      SERVICE_ROLE: accounts
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8003:8000"
+    networks:
+      - miar-net
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/payments-service
+    container_name: miar-payments
+    environment:
+      SERVICE_NAME: payments-service
+      SERVICE_ROLE: payments
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8004:8000"
+    networks:
+      - miar-net
+
+  cards-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/cards-service
+    container_name: miar-cards
+    environment:
+      SERVICE_NAME: cards-service
+      SERVICE_ROLE: cards
+      SLEEP_SYMBOL: "*"
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8005:8000"
+    networks:
+      - miar-net
+
+  loans-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/loans-service
+    container_name: miar-loans
+    environment:
+      SERVICE_NAME: loans-service
+      SERVICE_ROLE: loans
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8006:8000"
+    networks:
+      - miar-net
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/notifications-service
+    container_name: miar-notifications
+    environment:
+      SERVICE_NAME: notifications-service
+      SERVICE_ROLE: notifications
+      SLEEP_SYMBOL: "#"
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8007:8000"
+    networks:
+      - miar-net
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: ./docker/service.Dockerfile
+      args:
+        SERVICE_DIR: services/audit-service
+    container_name: miar-audit
+    environment:
+      SERVICE_NAME: audit-service
+      SERVICE_ROLE: audit
+      SLEEP_SYMBOL: "-"
+      SERVICE_PORT: "8000"
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8008:8000"
+    networks:
+      - miar-net
+
+volumes:
+  rabbitmq-data:
+
+networks:
+  miar-net:
+    driver: bridge
+
