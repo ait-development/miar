@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-  SERVICE_NAME: ma-cicd
-  REGISTRY_ID: ajec5lge6g5v1sdivg72
+  SERVICE_NAME: accounts-service
+  REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
   IMAGE_NAME: accounts-service
   CONTAINER_NAME: accounts-service-container
 
@@ -150,4 +150,3 @@ jobs:
         run: |
           echo "❌ Accounts service deployment failed"
           exit 1
-
