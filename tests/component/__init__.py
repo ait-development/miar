@@ -1,0 +1,2 @@
+"""Component tests for microservices."""
+

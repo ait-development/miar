@@ -46,7 +46,6 @@ async def run_smoke() -> None:
     async with httpx.AsyncClient() as client:
         results: dict[str, dict[str, Any]] = {}
 
-        # Auth service
         results["auth_health"] = await check_health(client, SERVICES["auth"])
         results["auth_event"] = await post_json(
             client,
@@ -55,7 +54,6 @@ async def run_smoke() -> None:
             {"user_id": "user-1", "action": "login", "ip_address": "127.0.0.1"},
         )
 
-        # Customers service
         results["customers_health"] = await check_health(client, SERVICES["customers"])
         results["customers_card"] = await post_json(
             client,
@@ -69,7 +67,6 @@ async def run_smoke() -> None:
             },
         )
 
-        # Accounts service
         results["accounts_health"] = await check_health(client, SERVICES["accounts"])
         results["accounts_payment"] = await post_json(
             client,
@@ -83,7 +80,6 @@ async def run_smoke() -> None:
             },
         )
 
-        # Payments service
         results["payments_health"] = await check_health(client, SERVICES["payments"])
         results["payments_workload"] = await post_json(
             client,
@@ -92,7 +88,6 @@ async def run_smoke() -> None:
             {"symbol": "#", "sleep_seconds": 0, "payload": {"demo": True}},
         )
 
-        # Loans service
         results["loans_health"] = await check_health(client, SERVICES["loans"])
         results["loans_application"] = await post_json(
             client,
@@ -106,7 +101,6 @@ async def run_smoke() -> None:
             },
         )
 
-        # Cards/Notifications/Audit overview endpoints
         results["cards_health"] = await check_health(client, SERVICES["cards"])
         results["cards_events"] = await get_json(client, SERVICES["cards"], "/cards/events")
 
@@ -123,10 +117,5 @@ async def run_smoke() -> None:
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            asyncio.run(run_smoke())
-        except Exception as e:
-            print(f"Error: {e}")
-            time.sleep(1)
+    asyncio.run(run_smoke())
 

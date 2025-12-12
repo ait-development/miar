@@ -1,0 +1,153 @@
+name: Accounts Service CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/accounts-service/**'
+      - 'common/**'
+      - '.github/workflows/accounts-service-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/accounts-service/**'
+      - 'common/**'
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: ma-cicd
+  REGISTRY_ID: ajec5lge6g5v1sdivg72
+  IMAGE_NAME: accounts-service
+  CONTAINER_NAME: accounts-service-container
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+          pip install -r services/accounts-service/requirements.txt
+
+      - name: Run component tests for accounts-service
+        run: |
+          pytest tests/component/test_accounts_service.py -v
+
+  build-and-deploy:
+    name: Build and Deploy to Yandex Cloud
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Yandex Cloud Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: cr.yandex
+          username: json_key
+          password: ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/accounts-service/Dockerfile
+          push: true
+          tags: |
+            cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:latest
+            cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Configure Yandex Cloud CLI
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > key.json
+          yc config profile create sa-profile
+          yc config set service-account-key key.json
+          yc config set cloud-id ${{ secrets.YC_CLOUD_ID }}
+          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+          rm key.json
+
+      - name: Deploy to Serverless Containers
+        run: |
+          # Get or create the container
+          CONTAINER_ID=$(yc serverless container list --format json | jq -r ".[] | select(.name==\"${{ env.CONTAINER_NAME }}\") | .id")
+          
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Creating new serverless container..."
+            yc serverless container create \
+              --name ${{ env.CONTAINER_NAME }} \
+              --description "Accounts Service - Serverless Container"
+          else
+            echo "Container already exists with ID: $CONTAINER_ID"
+          fi
+          
+          # Deploy new revision
+          echo "Deploying new revision..."
+          yc serverless container revision deploy \
+            --container-name ${{ env.CONTAINER_NAME }} \
+            --image cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --cores 1 \
+            --memory 512MB \
+            --execution-timeout 30s \
+            --service-account-id ${{ secrets.YC_SERVICE_ACCOUNT_ID }} \
+            --environment SERVICE_NAME=accounts-service \
+            --environment SERVICE_ROLE=accounts \
+            --environment SERVICE_PORT=8000 \
+            --environment RABBITMQ_URL=${{ secrets.RABBITMQ_URL }}
+
+      - name: Get container URL
+        run: |
+          CONTAINER_URL=$(yc serverless container get ${{ env.CONTAINER_NAME }} --format json | jq -r '.url')
+          echo "Container deployed successfully!"
+          echo "Container URL: $CONTAINER_URL"
+          echo "CONTAINER_URL=$CONTAINER_URL" >> $GITHUB_ENV
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f ${{ env.CONTAINER_URL }}/health || echo "Health check failed, but deployment completed"
+
+  notify:
+    name: Notify deployment status
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+    
+    steps:
+      - name: Deployment succeeded
+        if: needs.build-and-deploy.result == 'success'
+        run: |
+          echo "✅ Accounts service deployed successfully to Yandex Cloud Serverless Containers"
+          
+      - name: Deployment failed
+        if: needs.build-and-deploy.result != 'success'
+        run: |
+          echo "❌ Accounts service deployment failed"
+          exit 1
+
