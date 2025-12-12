@@ -54,11 +54,41 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deployment complete
+      - name: Install Yandex Cloud CLI
         run: |
-          echo "✅ Docker image built and pushed successfully!"
-          echo "Image: cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          echo "Latest: cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:latest"
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Deploy to Serverless Container
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > key.json
+          yc config profile create deploy-profile
+          yc config set service-account-key key.json
+          rm key.json
+          
+          # Create container if not exists
+          if ! yc serverless container get ${{ env.CONTAINER_NAME }} 2>/dev/null; then
+            echo "Creating new serverless container..."
+            yc serverless container create --name ${{ env.CONTAINER_NAME }}
+          fi
+          
+          # Deploy new revision
+          yc serverless container revision deploy \
+            --container-name ${{ env.CONTAINER_NAME }} \
+            --image cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --cores 1 \
+            --memory 512MB \
+            --execution-timeout 30s \
+            --service-account-id ${{ secrets.YC_SERVICE_ACCOUNT_ID }} \
+            --environment SERVICE_NAME=accounts-service \
+            --environment SERVICE_ROLE=accounts \
+            --environment SERVICE_PORT=8000
+          
+          echo "✅ Deployment complete!"
+          
+          # Get and display URL
+          CONTAINER_URL=$(yc serverless container get ${{ env.CONTAINER_NAME }} --format json | jq -r '.url')
+          echo "Container URL: $CONTAINER_URL"
 
   notify:
     name: Notify build status
